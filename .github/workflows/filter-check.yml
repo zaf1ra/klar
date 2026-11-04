@@ -10,6 +10,7 @@ on:
     paths:
       - "Klar/Rules/rules.json"
       - "tools/check-rules.mjs"
+      - ".github/workflows/filter-check.yml"
 
 permissions:
   contents: read
