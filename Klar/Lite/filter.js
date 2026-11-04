@@ -18,9 +18,19 @@
   }
 
   // 1. Ausblenden per CSS: greift sofort, auch bevor die Seite fertig geladen ist.
+  //    Kann so früh laufen, dass es noch kein <html> gibt – dann warten, bis es da ist.
   const style = document.createElement('style');
   style.textContent = R.hideSelectors.map((s) => s + '{display:none!important}').join('\n');
-  (document.head || document.documentElement).appendChild(style);
+  function insertStyle() {
+    const root = document.head || document.documentElement;
+    if (!root) return false;
+    root.appendChild(style);
+    return true;
+  }
+  if (!insertStyle()) {
+    const waiter = new MutationObserver(() => { if (insertStyle()) waiter.disconnect(); });
+    waiter.observe(document, { childList: true, subtree: true });
+  }
 
   // 2. Gesperrte Pfade und Umleitungen. Auch für Seitenwechsel ohne Neuladen (pushState).
   const blocked = R.blockedPaths.map((p) => new RegExp(p));
