@@ -1,4 +1,4 @@
-// Wird in jede Lite-Seite eingeschleust. window.__klarRules wird vorher von Swift gesetzt.
+// Wird in jede Seite in Slop eingeschleust. window.__klarRules wird vorher von Swift gesetzt.
 (function () {
   if (window.__klarRunning) return;
   window.__klarRunning = true;
@@ -31,6 +31,25 @@
     const waiter = new MutationObserver(() => { if (insertStyle()) waiter.disconnect(); });
     waiter.observe(document, { childList: true, subtree: true });
   }
+
+  // Für die eigene Leiste unten: klickt den ersten gefundenen Knopf der Seite an.
+  // Links werden direkt geöffnet, alles andere bekommt ein echtes Klick-Ereignis.
+  window.__klarClick = function (selectors) {
+    for (const sel of selectors) {
+      let el = null;
+      try { el = document.querySelector(sel); } catch (e) { continue; }
+      if (!el) continue;
+      const target = el.closest('a[href],button,[role="button"],[role="link"]') || el;
+      const href = target.tagName === 'A' ? target.getAttribute('href') : null;
+      if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
+        location.assign(target.href);
+      } else {
+        target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+      }
+      return true;
+    }
+    return false;
+  };
 
   // 2. Gesperrte Pfade und Umleitungen. Auch für Seitenwechsel ohne Neuladen (pushState).
   const blocked = R.blockedPaths.map((p) => new RegExp(p));
@@ -85,6 +104,29 @@
     }
   }
 
+  // 3b. Die Original-Leiste unten ausblenden, wenn Slop eine eigene zeigt. Gesucht wird das
+  //     fest unten angeheftete Element, das einen typischen Link enthält – unabhängig von
+  //     Klassennamen. Es bleibt im Code, damit __klarClick seine Links noch findet.
+  //     Die Leiste kann aus mehreren verschachtelten, fest angehefteten Ebenen bestehen –
+  //     ausgeblendet wird die äußerste, damit kein Rand oder Hintergrund stehen bleibt.
+  function hideSiteBar() {
+    for (const sel of R.siteBarContains || []) {
+      for (const el of safeQuery(sel)) {
+        if (el.closest('[data-klar-sitebar]')) continue;
+        let bar = null;
+        for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
+          const rect = node.getBoundingClientRect();
+          if (rect.top < innerHeight * 0.6) break;
+          if (getComputedStyle(node).position === 'fixed' && rect.bottom >= innerHeight - 4) bar = node;
+        }
+        if (bar) {
+          bar.dataset.klarSitebar = '1';
+          bar.style.setProperty('display', 'none', 'important');
+        }
+      }
+    }
+  }
+
   // 4. Videowerbung überspringen.
   function skipVideoAds() {
     if (!R.skipVideoAds) return;
@@ -118,6 +160,7 @@
       scheduled = false;
       if (checkPath()) return;
       scanContainers();
+      hideSiteBar();
       skipVideoAds();
     }, 300);
   }

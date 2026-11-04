@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 /// Startseite: schlicht, schwarz-weiß, keine Badges.
@@ -5,8 +6,11 @@ struct HomeView: View {
     @Environment(RuleStore.self) private var rules
     @Environment(HealthMonitor.self) private var health
     @Environment(ProgressStore.self) private var progress
+    @Environment(\.scenePhase) private var scenePhase
     @State private var openSite: SiteRules?
     @State private var showControlCenter = false
+    @State private var now = Date()
+    private let minuteTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     var body: some View {
         NavigationStack {
@@ -18,7 +22,7 @@ struct HomeView: View {
                             .foregroundStyle(.secondary)
                         Text("\(progress.todayMinutes) von \(Config.dailyGoalMinutes) min")
                             .font(.system(size: 34, weight: .medium))
-                        Text("heute in den Lite-Ansichten")
+                        Text("heute mit Social Media")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         HStack(spacing: 8) {
@@ -29,6 +33,9 @@ struct HomeView: View {
                         ProgressView(value: Double(progress.xpInLevel), total: 200)
                             .tint(.primary)
                             .padding(.top, 4)
+                        Text("+10 XP in \(progress.minutesToNextReward(at: now)) min ohne Social Media")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 6)
                 }
@@ -56,7 +63,7 @@ struct HomeView: View {
                     }
                 }
             }
-            .navigationTitle("Klar")
+            .navigationTitle("Slop")
             .fullScreenCover(item: $openSite) { site in
                 LiteScreen(site: site)
             }
@@ -65,6 +72,20 @@ struct HomeView: View {
             }
         }
         .tint(.primary)
+        .onAppear { refresh() }
+        .onReceive(minuteTimer) { _ in refresh() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { refresh() }
+        }
+        .onChange(of: openSite) { _, site in
+            // Nach dem Schließen einer Seite sofort die neue Restzeit zeigen.
+            if site == nil { refresh() }
+        }
+    }
+
+    private func refresh() {
+        now = Date()
+        progress.accrueAwayTime()
     }
 }
 

@@ -37,7 +37,7 @@ final class HealthMonitor {
 
     func attach(rules: RuleStore) { self.rules = rules }
 
-    // MARK: Meldungen aus den Lite-Seiten
+    // MARK: Meldungen aus den Seiten
 
     func recordProbe(site: SiteRules, results: [String: Int], visible: [String: Int]) {
         for (id, count) in results {
@@ -61,6 +61,8 @@ final class HealthMonitor {
     }
 
     func checkLogin(site: SiteRules) async {
+        // Ohne bekanntes Login-Cookie lässt sich der Status nicht prüfen.
+        guard !site.loginCookie.isEmpty else { return }
         let cookies = await WKWebsiteDataStore.default().httpCookieStore.allCookies()
         let host = site.allowedHosts.first ?? ""
         loggedIn[site.id] = cookies.contains { $0.name == site.loginCookie && $0.domain.hasSuffix(host) }
@@ -96,9 +98,11 @@ final class HealthMonitor {
 
         for site in store.rules.sites {
             let isLoggedIn = loggedIn[site.id] ?? false
-            result.append(isLoggedIn
-                ? Item(id: "\(site.id)-login", level: .ok, title: "\(site.name): eingeloggt", detail: "Alles bereit")
-                : Item(id: "\(site.id)-login", level: .info, title: "\(site.name): nicht eingeloggt", detail: "Öffne \(site.name) und melde dich an."))
+            if !site.loginCookie.isEmpty {
+                result.append(isLoggedIn
+                    ? Item(id: "\(site.id)-login", level: .ok, title: "\(site.name): eingeloggt", detail: "Alles bereit")
+                    : Item(id: "\(site.id)-login", level: .info, title: "\(site.name): nicht eingeloggt", detail: "Öffne \(site.name) und melde dich an."))
+            }
 
             for probe in site.probes {
                 let runs = probeRuns[site.id]?[probe.id] ?? 0
@@ -126,7 +130,7 @@ final class HealthMonitor {
                                detail: error, fix: .reloadRules))
         } else if let age, age > 3 {
             result.append(Item(id: "rules-remote", level: .warning, title: "Regeln seit \(Int(age)) Tagen nicht geprüft",
-                               detail: "Klar ist offline oder GitHub nicht erreichbar.", fix: .reloadRules))
+                               detail: "Slop ist offline oder GitHub nicht erreichbar.", fix: .reloadRules))
         }
         result.append(Item(id: "rules-version", level: .ok, title: "Filterregeln v\(store.rules.version)",
                            detail: "Stand \(store.rules.updated), Quelle: \(store.source.rawValue)"))

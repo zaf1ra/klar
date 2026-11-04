@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "updated": "2026-10-29",
+  "version": 2,
+  "updated": "2026-11-04",
   "adDomains": [
     "doubleclick.net",
     "googlesyndication.com",
@@ -16,7 +16,7 @@
   "sites": [
     {
       "id": "instagram",
-      "name": "Instagram Lite",
+      "name": "Instagram",
       "icon": "camera",
       "home": "https://www.instagram.com/?variant=following",
       "allowedHosts": [
@@ -98,11 +98,72 @@
           "reels-tab",
           "feed-posts"
         ]
-      }
+      },
+      "siteBarContains": [
+        "a[href*=\"/direct/\"]",
+        "a[href=\"/explore/\"]",
+        "a[href=\"/reels/\"]"
+      ],
+      "tabs": [
+        {
+          "id": "home",
+          "label": "Start",
+          "icon": "house",
+          "url": "/?variant=following",
+          "match": "^/$"
+        },
+        {
+          "id": "search",
+          "label": "Suche",
+          "icon": "magnifyingglass",
+          "url": "/explore/search/",
+          "match": "^/explore/search"
+        },
+        {
+          "id": "create",
+          "label": "Erstellen",
+          "icon": "plus.app",
+          "menu": [
+            {
+              "label": "Beitrag erstellen",
+              "icon": "square.and.pencil",
+              "click": [
+                "svg[aria-label=\"Neuer Beitrag\"]",
+                "svg[aria-label=\"New post\"]",
+                "svg[aria-label=\"Erstellen\"]",
+                "svg[aria-label=\"Create\"]",
+                "a[href=\"/create/select/\"]",
+                "a[href=\"/create/style/\"]"
+              ]
+            },
+            {
+              "label": "Story in der Instagram-App",
+              "icon": "camera",
+              "appURL": "instagram://story-camera",
+              "appMissing": "Instagram ist nicht installiert. Für Storys mit Musik und Stickern brauchst du die Instagram-App."
+            }
+          ]
+        },
+        {
+          "id": "direct",
+          "label": "Nachrichten",
+          "icon": "paperplane",
+          "url": "/direct/inbox/",
+          "match": "^/direct"
+        },
+        {
+          "id": "profile",
+          "label": "Profil",
+          "icon": "person.crop.circle",
+          "click": [
+            "[data-klar-sitebar] a[href^=\"/\"]:has(img)"
+          ]
+        }
+      ]
     },
     {
       "id": "youtube",
-      "name": "YouTube Lite",
+      "name": "YouTube",
       "icon": "play.rectangle",
       "home": "https://m.youtube.com/feed/subscriptions",
       "allowedHosts": [
@@ -140,7 +201,8 @@
         ".ytp-ad-overlay-container",
         "ytm-item-section-renderer[section-identifier=\"related-items\"]",
         "ytm-autonav-toggle-button-container",
-        ".ytm-autonav-bar"
+        ".ytm-autonav-bar",
+        "ytm-pivot-bar-renderer"
       ],
       "containerRules": [],
       "skipVideoAds": {
@@ -172,7 +234,109 @@
           "shorts-tab",
           "shorts-shelf"
         ]
-      }
+      },
+      "tabs": [
+        {
+          "id": "home",
+          "label": "Startseite",
+          "icon": "house",
+          "url": "/feed/subscriptions",
+          "match": "^/feed/subscriptions"
+        },
+        {
+          "id": "search",
+          "label": "Suche",
+          "icon": "magnifyingglass",
+          "search": "/results?search_query={q}",
+          "match": "^/results"
+        },
+        {
+          "id": "channels",
+          "label": "Abos",
+          "icon": "play.square.stack",
+          "url": "/feed/channels",
+          "match": "^/feed/channels"
+        },
+        {
+          "id": "later",
+          "label": "Später ansehen",
+          "icon": "play.rectangle",
+          "url": "/playlist?list=WL",
+          "match": "^/playlist"
+        },
+        {
+          "id": "you",
+          "label": "Mein YouTube",
+          "icon": "person.crop.circle",
+          "url": "/feed/you",
+          "match": "^/feed/(you|library|history)"
+        }
+      ]
+    },
+    {
+      "id": "snapchat",
+      "name": "Snapchat",
+      "icon": "bubble.left.and.bubble.right",
+      "home": "https://accounts.snapchat.com/v2/login?continue=https%3A%2F%2Fwww.snapchat.com%2Fweb%2F",
+      "allowedHosts": [
+        "snapchat.com",
+        "snap.com",
+        "sc-static.net",
+        "sc-cdn.net",
+        "snapkit.com",
+        "google.com",
+        "gstatic.com"
+      ],
+      "blockedPaths": [
+        "^/spotlight",
+        "^/discover"
+      ],
+      "redirects": [],
+      "hideSelectors": [],
+      "containerRules": [],
+      "probes": [],
+      "loginCookie": "",
+      "desktopMode": true
+    },
+    {
+      "id": "pinterest",
+      "name": "Pinterest",
+      "icon": "pin",
+      "home": "https://www.pinterest.com/",
+      "allowedHosts": [
+        "pinterest.com",
+        "pinterest.de",
+        "pinterest.at",
+        "pinterest.ch",
+        "pinimg.com",
+        "google.com",
+        "gstatic.com"
+      ],
+      "blockedPaths": [
+        "^/watch"
+      ],
+      "redirects": [],
+      "hideSelectors": [],
+      "containerRules": [
+        {
+          "id": "pin-ads",
+          "label": "Werbung",
+          "container": "[data-grid-item=\"true\"]",
+          "text": [
+            "Gesponsert",
+            "Promoted",
+            "Werbung"
+          ]
+        },
+        {
+          "id": "pin-videos",
+          "label": "Video-Pins",
+          "container": "[data-grid-item=\"true\"]",
+          "has": "video"
+        }
+      ],
+      "probes": [],
+      "loginCookie": ""
     }
   ]
 }

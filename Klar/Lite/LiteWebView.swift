@@ -1,15 +1,41 @@
 import SwiftUI
 import WebKit
 
-/// Ein WKWebView, der eine Seite (Instagram, YouTube) mit den Klar-Filtern lädt.
+/// Steuert die WebView von außen (eigene Leiste unten): laden, Knöpfe der Seite anklicken,
+/// aktuellen Pfad kennen.
+@MainActor
+@Observable
+final class WebController {
+    @ObservationIgnored weak var webView: WKWebView?
+    /// Pfad der aktuell angezeigten Seite, auch bei Seitenwechseln ohne Neuladen.
+    var path = "/"
+
+    func load(_ url: URL) {
+        #if DEBUG
+        NSLog("[Klar] load %@", url.absoluteString)
+        #endif
+        webView?.load(URLRequest(url: url))
+    }
+
+    /// Klickt den ersten gefundenen Knopf der Seite an. false, wenn keiner gefunden wurde.
+    func click(_ selectors: [String]) async -> Bool {
+        guard let webView else { return false }
+        let result = try? await webView.callAsyncJavaScript(
+            "return window.__klarClick ? window.__klarClick(selectors) : false",
+            arguments: ["selectors": selectors], in: nil, contentWorld: .page)
+        return result as? Bool ?? false
+    }
+}
+
+/// Ein WKWebView, der eine Seite (Instagram, YouTube ...) mit den Slop-Filtern lädt.
 struct LiteWebView: UIViewRepresentable {
     let site: SiteRules
     let adDomains: [String]
     let health: HealthMonitor
-    @Binding var canGoBack: Bool
+    let controller: WebController
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(site: site, health: health, canGoBack: $canGoBack)
+        Coordinator(site: site, health: health, controller: controller)
     }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -18,20 +44,29 @@ struct LiteWebView: UIViewRepresentable {
         // Nichts startet von selbst: Videos laufen erst, wenn du tippst.
         config.mediaTypesRequiringUserActionForPlayback = .all
         config.websiteDataStore = .default()
+        let desktop = site.desktopMode == true
+        config.defaultWebpagePreferences.preferredContentMode = desktop ? .desktop : .mobile
 
-        let controller = config.userContentController
-        controller.add(context.coordinator, name: "klar")
-        controller.addUserScript(WKUserScript(
+        let userContent = config.userContentController
+        userContent.add(context.coordinator, name: "klar")
+        userContent.addUserScript(WKUserScript(
             source: Self.makeScript(for: site),
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
 
         let webView = WKWebView(frame: .zero, configuration: config)
-        webView.customUserAgent = Config.userAgent
+        webView.customUserAgent = desktop ? Config.desktopUserAgent : Config.userAgent
         webView.navigationDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
-        context.coordinator.webView = webView
+
+        // Nach unten ziehen lädt neu (ersetzt den früheren Neu-laden-Knopf).
+        let refresh = UIRefreshControl()
+        refresh.addTarget(context.coordinator, action: #selector(Coordinator.reload), for: .valueChanged)
+        webView.scrollView.refreshControl = refresh
+
+        controller.webView = webView
+        context.coordinator.observe(webView)
 
         var start = site.home
         #if DEBUG
@@ -42,7 +77,7 @@ struct LiteWebView: UIViewRepresentable {
         }
         #endif
         AdBlocker.ruleList(for: adDomains, health: health) { list in
-            if let list { controller.add(list) }
+            if let list { userContent.add(list) }
             if let url = URL(string: start) { webView.load(URLRequest(url: url)) }
         }
         return webView
@@ -65,18 +100,30 @@ struct LiteWebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         let site: SiteRules
         let health: HealthMonitor
-        @Binding var canGoBack: Bool
-        weak var webView: WKWebView?
+        let controller: WebController
+        private var urlObservation: NSKeyValueObservation?
 
-        init(site: SiteRules, health: HealthMonitor, canGoBack: Binding<Bool>) {
+        init(site: SiteRules, health: HealthMonitor, controller: WebController) {
             self.site = site
             self.health = health
-            self._canGoBack = canGoBack
+            self.controller = controller
         }
 
-        func goBack() { webView?.goBack() }
+        func observe(_ webView: WKWebView) {
+            urlObservation = webView.observe(\.url, options: [.new]) { [weak self] webView, _ in
+                let path = webView.url?.path ?? "/"
+                #if DEBUG
+                NSLog("[Klar] url %@", webView.url?.absoluteString ?? "-")
+                #endif
+                Task { @MainActor in self?.controller.path = path.isEmpty ? "/" : path }
+            }
+        }
 
-        func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        @objc func reload() {
+            controller.webView?.reload()
+        }
+
+        func userContentController(_ userContent: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
             #if DEBUG
             NSLog("[Klar] %@: %@", site.id, String(describing: body))
@@ -122,15 +169,18 @@ struct LiteWebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            canGoBack = webView.canGoBack
+            webView.scrollView.refreshControl?.endRefreshing()
             Task { await health.checkLogin(site: site) }
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            webView.scrollView.refreshControl?.endRefreshing()
+            if (error as NSError).code == NSURLErrorCancelled { return }
             health.recordIssue(site: site.id, "Seite lädt nicht: \(error.localizedDescription)")
         }
 
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            webView.scrollView.refreshControl?.endRefreshing()
             if (error as NSError).code == NSURLErrorCancelled { return }
             health.recordIssue(site: site.id, "Seite lädt nicht: \(error.localizedDescription)")
         }
