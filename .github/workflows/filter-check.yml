@@ -1,0 +1,64 @@
+name: Filter-Check
+
+# Prüft jede Nacht, ob die Lite-Filter auf Instagram und YouTube noch greifen.
+# Wenn nicht, wird ein Issue im Repo geöffnet (GitHub schickt dir dazu eine Mail).
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+  push:
+    paths:
+      - "Klar/Rules/rules.json"
+      - "tools/check-rules.mjs"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Playwright installieren
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps webkit
+
+      - name: Filter prüfen
+        id: check
+        continue-on-error: true
+        env:
+          IG_SESSIONID: ${{ secrets.IG_SESSIONID }}
+        run: node tools/check-rules.mjs
+
+      - name: Screenshots speichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: filter-check
+          path: |
+            check-*.png
+            check-report.md
+
+      - name: Issue öffnen, wenn ein Filter kaputt ist
+        if: steps.check.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="Lite-Filter defekt"
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$TITLE in:title" --json number --jq '.[0].number')
+          BODY="$(cat check-report.md)
+
+          Lauf: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+          fi
+          exit 1

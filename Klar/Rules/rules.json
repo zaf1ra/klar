@@ -1,0 +1,178 @@
+{
+  "version": 1,
+  "updated": "2026-10-29",
+  "adDomains": [
+    "doubleclick.net",
+    "googlesyndication.com",
+    "googleadservices.com",
+    "google-analytics.com",
+    "googletagmanager.com",
+    "adservice.google.com",
+    "imasdk.googleapis.com",
+    "pagead2.googlesyndication.com",
+    "an.facebook.com",
+    "connect.facebook.net"
+  ],
+  "sites": [
+    {
+      "id": "instagram",
+      "name": "Instagram Lite",
+      "icon": "camera",
+      "home": "https://www.instagram.com/?variant=following",
+      "allowedHosts": [
+        "instagram.com",
+        "facebook.com",
+        "fbcdn.net",
+        "cdninstagram.com"
+      ],
+      "blockedPaths": [
+        "^/reels?/",
+        "^/explore(/(?!search)|/?$)"
+      ],
+      "redirects": [
+        {
+          "path": "^/$",
+          "unlessQuery": "variant=following",
+          "to": "/?variant=following"
+        }
+      ],
+      "hideSelectors": [
+        "a[href=\"/reels/\"]",
+        "a[href=\"/explore/\"]",
+        "a[href$=\"/reels/\"][role=\"tab\"]",
+        "a[href*=\"/reels/audio/\"]"
+      ],
+      "containerRules": [
+        {
+          "id": "sponsored",
+          "label": "Werbung",
+          "container": "article",
+          "text": [
+            "Gesponsert",
+            "Sponsored"
+          ]
+        },
+        {
+          "id": "suggested",
+          "label": "Vorschläge",
+          "container": "article",
+          "text": [
+            "Vorgeschlagen für dich",
+            "Suggested for you",
+            "Vorgeschlagene Beiträge",
+            "Suggested posts"
+          ]
+        },
+        {
+          "id": "feed-reels",
+          "label": "Reels im Feed",
+          "container": "article",
+          "has": "a[href*=\"/reel/\"]"
+        }
+      ],
+      "probes": [
+        {
+          "id": "reels-tab",
+          "label": "Reels-Tab",
+          "selector": "a[href=\"/reels/\"]",
+          "path": ".*",
+          "requiresLogin": true,
+          "expectHidden": true
+        },
+        {
+          "id": "feed-posts",
+          "label": "Beiträge im Feed",
+          "selector": "article",
+          "path": "^/$",
+          "requiresLogin": true,
+          "expectHidden": false
+        }
+      ],
+      "loginCookie": "sessionid",
+      "ciCheck": {
+        "url": "https://www.instagram.com/?variant=following",
+        "cookieEnv": "IG_SESSIONID",
+        "cookieName": "sessionid",
+        "cookieDomain": ".instagram.com",
+        "probes": [
+          "reels-tab",
+          "feed-posts"
+        ]
+      }
+    },
+    {
+      "id": "youtube",
+      "name": "YouTube Lite",
+      "icon": "play.rectangle",
+      "home": "https://m.youtube.com/feed/subscriptions",
+      "allowedHosts": [
+        "youtube.com",
+        "youtu.be",
+        "google.com",
+        "googlevideo.com",
+        "ytimg.com",
+        "gstatic.com"
+      ],
+      "blockedPaths": [
+        "^/shorts",
+        "^/feed/trending",
+        "^/feed/explore"
+      ],
+      "redirects": [
+        {
+          "path": "^/$",
+          "to": "/feed/subscriptions"
+        }
+      ],
+      "hideSelectors": [
+        "ytm-reel-shelf-renderer",
+        "ytm-shorts-lockup-view-model",
+        "ytm-shorts-lockup-view-model-v2",
+        "ytm-pivot-bar-item-renderer:has(.pivot-shorts)",
+        "ytm-pivot-bar-item-renderer:has(a[href^=\"/shorts\"])",
+        "ytm-rich-section-renderer:has(a[href^=\"/shorts\"])",
+        "ytm-video-with-context-renderer:has(a[href^=\"/shorts\"])",
+        "ytm-promoted-sparkles-web-renderer",
+        "ytm-promoted-video-renderer",
+        "ytm-companion-ad-renderer",
+        "ad-slot-renderer",
+        "ytm-ad-slot-renderer",
+        ".ytp-ad-overlay-container",
+        "ytm-item-section-renderer[section-identifier=\"related-items\"]",
+        "ytm-autonav-toggle-button-container",
+        ".ytm-autonav-bar"
+      ],
+      "containerRules": [],
+      "skipVideoAds": {
+        "adShowing": ".ad-showing video",
+        "skipButtons": ".ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button"
+      },
+      "probes": [
+        {
+          "id": "shorts-tab",
+          "label": "Shorts-Tab",
+          "selector": "ytm-pivot-bar-item-renderer .pivot-shorts, ytm-pivot-bar-item-renderer a[href^=\"/shorts\"]",
+          "path": ".*",
+          "requiresLogin": false,
+          "expectHidden": true
+        },
+        {
+          "id": "shorts-shelf",
+          "label": "Shorts in der Suche",
+          "selector": "ytm-reel-shelf-renderer, ytm-shorts-lockup-view-model, ytm-shorts-lockup-view-model-v2, a[href^=\"/shorts\"]",
+          "path": "^/results",
+          "requiresLogin": false,
+          "expectHidden": true
+        }
+      ],
+      "loginCookie": "LOGIN_INFO",
+      "ciCheck": {
+        "url": "https://m.youtube.com/results?search_query=musik",
+        "probes": [
+          "shorts-tab",
+          "shorts-shelf"
+        ]
+      }
+    }
+  ]
+}
