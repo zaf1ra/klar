@@ -33,6 +33,14 @@ struct SiteRules: Codable, Equatable, Identifiable {
     /// Erkennt die Original-Leiste unten an einem Link darin (z. B. zu den Nachrichten),
     /// um sie auszublenden, wenn `tabs` gesetzt ist.
     var siteBarContains: [String]?
+    /// Original-App-Icon der Website (apple-touch-icon). Fehlt es, wird `icon` als Symbol gezeigt.
+    var iconURL: String?
+    /// Hintergrundfarbe (#RRGGBB), auf die ein freigestelltes Logo gesetzt wird.
+    var iconBackground: String?
+    /// Größe des Logos auf dem Hintergrund, 0–1.
+    var iconScale: Double?
+    /// Färbt die vom Rand aus erreichbare helle Fläche ein (#RRGGBB), z. B. Snapchat-Gelb.
+    var iconFlood: String?
 }
 
 /// Ein Knopf in der eigenen Leiste unten. Genau eins von url, search, click oder menu ist gesetzt.
@@ -98,4 +106,16 @@ struct CICheck: Codable, Equatable {
     var cookieName: String?
     var cookieDomain: String?
     var probes: [String]
+}
+
+extension SiteRules {
+    /// Hauptdomain des Dienstes, z. B. youtube.com für m.youtube.com.
+    var ownDomain: String {
+        let host = URL(string: home)?.host ?? ""
+        return host.split(separator: ".").suffix(2).joined(separator: ".")
+    }
+
+    func isOwnDomain(_ host: String) -> Bool {
+        host == ownDomain || host.hasSuffix("." + ownDomain)
+    }
 }

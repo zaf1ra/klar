@@ -4,13 +4,21 @@
   window.__klarRunning = true;
 
   const R = window.__klarRules;
+
+  // Regeln nur auf der Domain des Dienstes anwenden, nicht auf Anmeldeseiten von Google,
+  // Facebook usw., die im selben Fenster oder in einem Anmelde-Fenster laufen.
+  const ownDomain = new URL(R.home).hostname.split('.').slice(-2).join('.');
+  if (location.hostname !== ownDomain && !location.hostname.endsWith('.' + ownDomain)) return;
   const post = (msg) => {
     try { window.webkit.messageHandlers.klar.postMessage(msg); } catch (e) {}
   };
 
-  window.addEventListener('error', (e) => {
-    post({ type: 'jsError', message: String(e.message || 'Unbekannter Fehler'), source: String(e.filename || '') });
-  });
+  // Nur Fehler im eigenen Code melden. Fehler aus den Skripten der Seite selbst sind normal
+  // und gehören nicht ins Kontrollzentrum.
+  const safe = (name, fn) => function () {
+    try { return fn.apply(this, arguments); }
+    catch (e) { post({ type: 'jsError', message: name + ': ' + String(e && e.message || e) }); }
+  };
 
   function safeQuery(selector, root) {
     try { return (root || document).querySelectorAll(selector); }
@@ -49,6 +57,59 @@
       return true;
     }
     return false;
+  };
+
+  // KI-Scanner: sammelt alles über den Beitrag in der Bildschirmmitte – Bilder, KI-Kennzeichnungen
+  // der Plattform und Hashtags. Die Bilddateien selbst prüft Slop danach in Swift.
+  window.__klarScan = function () {
+    const visibleArea = (el) => {
+      const r = el.getBoundingClientRect();
+      const w = Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0));
+      const h = Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0));
+      return w * h;
+    };
+    // Der Beitrag in der Bildschirmmitte: erst bekannte Beitrags-Bausteine der Dienste, sonst das
+    // kleinste Element um die Mitte, das etwa einen Bildschirm hoch ist (keine ganze Liste).
+    const center = document.elementFromPoint(innerWidth / 2, innerHeight * 0.45);
+    const known = 'article, [data-grid-item], [data-test-id="pin"], ytm-video-with-context-renderer, ' +
+      'ytm-rich-item-renderer, ytm-compact-video-renderer, ytm-watch, ytm-slim-video-metadata-section-renderer';
+    let container = center && center.closest(known);
+    if (!container && location.pathname === '/watch') container = document.querySelector('ytm-watch, #player');
+    for (let n = center; !container && n && n !== document.body; n = n.parentElement) {
+      const r = n.getBoundingClientRect();
+      if (r.height >= innerHeight * 0.55 && r.width >= innerWidth * 0.8 && r.height <= innerHeight * 2) container = n;
+    }
+    container = container || document.body;
+
+    const pickImages = (root) => Array.from(root.querySelectorAll('img'))
+      .filter((img) => /^https?:/.test(img.currentSrc || img.src) && img.naturalWidth >= 150 && visibleArea(img) > 2000)
+      .sort((a, b) => visibleArea(b) - visibleArea(a))
+      .slice(0, 3)
+      .map((img) => ({ src: img.currentSrc || img.src, width: img.naturalWidth, height: img.naturalHeight, alt: (img.alt || '').slice(0, 300) }));
+    let images = pickImages(container);
+    if (!images.length && container !== document.body) images = pickImages(document.body);
+
+    const aria = Array.from(container.querySelectorAll('[aria-label]')).map((e) => e.getAttribute('aria-label')).join('\n');
+    let text = (container.innerText || '') + '\n' + aria;
+    // Auf YouTube steht die Kennzeichnung in der Videobeschreibung, nicht im Player. Nur auf der
+    // Videoseite die ganze Seite lesen – in Ergebnislisten gehörte der Text zu anderen Videos.
+    if (/youtube\.com$/.test(location.hostname) && location.pathname === '/watch') {
+      text += '\n' + document.body.innerText.slice(0, 30000);
+    }
+
+    const labelRe = /(KI-Infos?|Mit KI (?:erstellt|generiert|bearbeitet)|KI-generiert|KI-bearbeitet|KI-modifiziert|AI info|Made with AI|AI[- ]generated|Generated with AI|Created with AI|Imagined with AI|AI modified|AI-modified|Altered or synthetic content|Veränderte oder synthetische Inhalte|Synthetic content|Synthetische Inhalte)/gi;
+    const tagRe = /#(ai|aiart|aiartwork|aiartist|aigenerated|aiimage|generativeai|genai|midjourney|stablediffusion|dalle|dalle3|sora|chatgpt|flux|runwayml|kiart|kikunst|kibild|aivideo|aimodel|aigirl|digitalhuman)\b/gi;
+    const unique = (arr) => Array.from(new Set(arr.map((x) => x.trim()))).slice(0, 8);
+
+    return {
+      url: location.href,
+      host: location.hostname,
+      images,
+      hasVideo: Array.from(container.querySelectorAll('video')).some((v) => visibleArea(v) > 2000),
+      labels: unique(text.match(labelRe) || []),
+      hashtags: unique((text.match(tagRe) || []).map((t) => t.toLowerCase())),
+      caption: (container.innerText || '').trim().slice(0, 500),
+    };
   };
 
   // 2. Gesperrte Pfade und Umleitungen. Auch für Seitenwechsel ohne Neuladen (pushState).
@@ -164,6 +225,11 @@
       skipVideoAds();
     }, 300);
   }
+
+  scanContainers = safe('Container', scanContainers);
+  hideSiteBar = safe('Leiste', hideSiteBar);
+  skipVideoAds = safe('Videowerbung', skipVideoAds);
+  probe = safe('Probe', probe);
 
   function start() {
     new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });

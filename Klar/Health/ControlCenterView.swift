@@ -37,7 +37,17 @@ struct ControlCenterView: View {
                             }
                         }
                         .padding(.vertical, 2)
+                        .swipeActions {
+                            if let dismissal = item.dismissal {
+                                Button("Erledigt") {
+                                    withAnimation(.smooth) { health.dismiss(dismissal) }
+                                }
+                                .tint(.green)
+                            }
+                        }
                     }
+                } footer: {
+                    Text("Meldungen nach links wischen, um sie als erledigt zu markieren.")
                 }
             }
             .navigationTitle("Kontrollzentrum")

@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "updated": "2026-11-04",
   "adDomains": [
     "doubleclick.net",
@@ -159,7 +159,8 @@
             "[data-klar-sitebar] a[href^=\"/\"]:has(img)"
           ]
         }
-      ]
+      ],
+      "iconURL": "https://static.cdninstagram.com/rsrc.php/yw/r/icwX0xAk0pz.webp"
     },
     {
       "id": "youtube",
@@ -271,7 +272,10 @@
           "url": "/feed/you",
           "match": "^/feed/(you|library|history)"
         }
-      ]
+      ],
+      "iconURL": "https://m.youtube.com/static/apple-touch-icon-180x180-precomposed.png",
+      "iconBackground": "#FFFFFF",
+      "iconScale": 0.62
     },
     {
       "id": "snapchat",
@@ -296,7 +300,9 @@
       "containerRules": [],
       "probes": [],
       "loginCookie": "",
-      "desktopMode": true
+      "desktopMode": true,
+      "iconURL": "https://www.snapchat.com/apple-touch-icon.png",
+      "iconFlood": "#FFFC00"
     },
     {
       "id": "pinterest",
@@ -336,7 +342,30 @@
         }
       ],
       "probes": [],
-      "loginCookie": ""
+      "loginCookie": "",
+      "iconURL": "https://s.pinimg.com/webapp/logo_transparent_144x144-3da7a67b.png",
+      "iconBackground": "#FFFFFF",
+      "iconScale": 0.72
+    },
+    {
+      "id": "substack",
+      "name": "Substack",
+      "icon": "newspaper",
+      "home": "https://substack.com/inbox",
+      "allowedHosts": [
+        "substack.com",
+        "substackcdn.com",
+        "google.com",
+        "gstatic.com",
+        "apple.com"
+      ],
+      "blockedPaths": [],
+      "redirects": [],
+      "hideSelectors": [],
+      "containerRules": [],
+      "probes": [],
+      "loginCookie": "",
+      "iconURL": "https://substackcdn.com/icons/substack/apple-touch-icon.png"
     }
   ]
 }

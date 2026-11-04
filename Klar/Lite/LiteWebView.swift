@@ -9,6 +9,13 @@ final class WebController {
     @ObservationIgnored weak var webView: WKWebView?
     /// Pfad der aktuell angezeigten Seite, auch bei Seitenwechseln ohne Neuladen.
     var path = "/"
+    /// Offenes Anmelde-Fenster (z. B. „Mit Google anmelden“), das die Seite per window.open öffnet.
+    var popup: PopupWindow?
+
+    struct PopupWindow: Identifiable {
+        let id = UUID()
+        let webView: WKWebView
+    }
 
     func load(_ url: URL) {
         #if DEBUG
@@ -58,6 +65,7 @@ struct LiteWebView: UIViewRepresentable {
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.customUserAgent = desktop ? Config.desktopUserAgent : Config.userAgent
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
 
         // Nach unten ziehen lädt neu (ersetzt den früheren Neu-laden-Knopf).
@@ -97,7 +105,7 @@ struct LiteWebView: UIViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         let site: SiteRules
         let health: HealthMonitor
         let controller: WebController
@@ -153,13 +161,16 @@ struct LiteWebView: UIViewRepresentable {
             guard url.scheme == "https" || url.scheme == "http" || url.scheme == "about" || url.scheme == "blob" else {
                 return decisionHandler(.cancel)
             }
+            // Im Anmelde-Fenster darf jede Anmeldeseite laden (Google, Apple, Facebook ...).
+            if webView !== controller.webView { return decisionHandler(.allow) }
             let isMainFrame = action.targetFrame?.isMainFrame ?? true
             if isMainFrame, let host = url.host, !site.allowedHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) }) {
                 UIApplication.shared.open(url)
                 return decisionHandler(.cancel)
             }
             // Zweite Sperre neben filter.js: greift schon, bevor die Seite lädt.
-            if isMainFrame, site.blockedPaths.contains(where: { url.path.range(of: $0, options: .regularExpression) != nil }) {
+            if isMainFrame, let host = url.host, site.isOwnDomain(host),
+               site.blockedPaths.contains(where: { url.path.range(of: $0, options: .regularExpression) != nil }) {
                 health.recordBlocked(site: site.id)
                 decisionHandler(.cancel)
                 if let home = URL(string: site.home) { webView.load(URLRequest(url: home)) }
@@ -168,20 +179,90 @@ struct LiteWebView: UIViewRepresentable {
             decisionHandler(.allow)
         }
 
+        // MARK: Fenster und Dialoge der Seite
+
+        private static let identityHosts = ["accounts.google.com", "appleid.apple.com", "facebook.com"]
+
+        /// window.open und Links mit target="_blank". Anmelde-Fenster öffnen sich als Blatt über der
+        /// Seite (die Seite wartet auf deren Antwort), alles andere lädt im selben Fenster.
+        func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                     for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+            let url = action.request.url
+            let host = url?.host ?? ""
+            let isLoginWindow = windowFeatures.width != nil || windowFeatures.height != nil
+                || url == nil || url?.absoluteString == "about:blank"
+                || Self.identityHosts.contains { host == $0 || host.hasSuffix("." + $0) }
+            guard isLoginWindow else {
+                if let url { webView.load(URLRequest(url: url)) }
+                return nil
+            }
+            let popup = WKWebView(frame: .zero, configuration: configuration)
+            popup.customUserAgent = webView.customUserAgent
+            popup.navigationDelegate = self
+            popup.uiDelegate = self
+            controller.popup = WebController.PopupWindow(webView: popup)
+            return popup
+        }
+
+        func webViewDidClose(_ webView: WKWebView) {
+            if controller.popup?.webView === webView { controller.popup = nil }
+        }
+
+        func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
+                     initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor () -> Void) {
+            let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in completionHandler() })
+            present(alert, otherwise: completionHandler)
+        }
+
+        func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
+                     initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor (Bool) -> Void) {
+            let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "Abbrechen", style: .cancel) { _ in completionHandler(false) })
+            alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in completionHandler(true) })
+            present(alert) { completionHandler(false) }
+        }
+
+        func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?,
+                     initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor (String?) -> Void) {
+            let alert = UIAlertController(title: nil, message: prompt, preferredStyle: .alert)
+            alert.addTextField { $0.text = defaultText }
+            alert.addAction(UIAlertAction(title: "Abbrechen", style: .cancel) { _ in completionHandler(nil) })
+            alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak alert] _ in
+                completionHandler(alert?.textFields?.first?.text)
+            })
+            present(alert) { completionHandler(nil) }
+        }
+
+        /// Zeigt den Dialog über allem, was gerade offen ist. Geht das nicht, wird die Seite nicht blockiert.
+        private func present(_ alert: UIAlertController, otherwise fallback: @escaping @MainActor () -> Void) {
+            let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+            var top = scene?.keyWindow?.rootViewController
+            while let presented = top?.presentedViewController { top = presented }
+            guard let top else { return fallback() }
+            top.present(alert, animated: true)
+        }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             webView.scrollView.refreshControl?.endRefreshing()
             Task { await health.checkLogin(site: site) }
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-            webView.scrollView.refreshControl?.endRefreshing()
-            if (error as NSError).code == NSURLErrorCancelled { return }
-            health.recordIssue(site: site.id, "Seite lädt nicht: \(error.localizedDescription)")
+            report(error, in: webView)
         }
 
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            report(error, in: webView)
+        }
+
+        /// Echte Ladefehler melden. Abgebrochene Ladevorgänge und von Slop absichtlich gesperrte
+        /// Links (WebKit-Fehler 102 „Frame load interrupted“) sind keine Fehler.
+        private func report(_ error: Error, in webView: WKWebView) {
             webView.scrollView.refreshControl?.endRefreshing()
-            if (error as NSError).code == NSURLErrorCancelled { return }
+            let nsError = error as NSError
+            if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled { return }
+            if nsError.domain == "WebKitErrorDomain", [102, 204].contains(nsError.code) { return }
             health.recordIssue(site: site.id, "Seite lädt nicht: \(error.localizedDescription)")
         }
     }

@@ -17,9 +17,27 @@ final class HealthMonitor {
         let title: String
         let detail: String
         var fix: Fix?
+        /// Gesetzt, wenn die Meldung im Kontrollzentrum weggewischt werden kann.
+        var dismissal: Dismissal?
     }
 
     enum Fix { case reloadRules, openGitHubHelp }
+
+    enum Dismissal {
+        case issue(site: String, message: String)
+        case probe(site: String, probe: String)
+    }
+
+    /// Meldung als erledigt markieren. Tritt das Problem erneut auf, erscheint sie wieder.
+    func dismiss(_ dismissal: Dismissal) {
+        switch dismissal {
+        case let .issue(site, message):
+            issues[site]?.removeAll { $0 == message }
+        case let .probe(site, probe):
+            probeMax[site]?[probe] = nil
+            probeRuns[site]?[probe] = nil
+        }
+    }
 
     private weak var rules: RuleStore?
 
@@ -112,12 +130,13 @@ final class HealthMonitor {
                         id: "\(site.id)-\(probe.id)", level: .error,
                         title: "\(site.name): Filter findet „\(probe.label)“ nicht",
                         detail: "Die Seite hat sich wahrscheinlich geändert. Neue Regeln laden oder auf GitHub anpassen.",
-                        fix: .reloadRules))
+                        fix: .reloadRules, dismissal: .probe(site: site.id, probe: probe.id)))
                 }
             }
 
             for message in issues[site.id] ?? [] {
-                result.append(Item(id: "\(site.id)-\(message)", level: .warning, title: site.name, detail: message))
+                result.append(Item(id: "\(site.id)-\(message)", level: .warning, title: site.name, detail: message,
+                                   dismissal: .issue(site: site.id, message: message)))
             }
         }
 
